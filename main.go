@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/bogem/id3v2"
-	"github.com/dhowden/tag"
 )
 
 var (
@@ -30,9 +29,8 @@ const (
 )
 
 type FileUpdate struct {
-	Path    string
-	Comment string
-	Ext     string
+	Path string
+	Ext  string
 }
 
 func main() {
@@ -64,34 +62,24 @@ func main() {
 		}
 		defer f.Close()
 
-		metaData, err := tag.ReadFrom(f)
-		if err != nil {
-			return nil
-		}
-
-		comment := metaData.Comment()
-		if comment != "" {
-			toUpdate = append(toUpdate, FileUpdate{
-				Path:    path,
-				Comment: comment,
-				Ext:     ext,
-			})
-		}
+		toUpdate = append(toUpdate, FileUpdate{
+			Path: path,
+			Ext:  ext,
+		})
 
 		return nil
 	})
 
 	// 2. Show summary
 	if len(toUpdate) == 0 {
-		fmt.Println(colorYellow + "No MP3 files with comments found." + colorReset)
+		fmt.Println(colorYellow + "No MP3 files found." + colorReset)
 		return
 	}
 
-	fmt.Println(colorCyan + "The following MP3 files will have their COMMENT removed:\n" + colorReset)
+	fmt.Println(colorCyan + "The following MP3 files will have their metadata removed:\n" + colorReset)
 
 	for _, item := range toUpdate {
-		fmt.Printf(" - %s %s(comment: %q)%s\n",
-			item.Path, colorYellow, item.Comment, colorReset)
+		fmt.Printf(" - %s\n", item.Path)
 	}
 
 	fmt.Printf("\n%sTotal: %d files%s\n\n", colorGreen, len(toUpdate), colorReset)
@@ -124,7 +112,7 @@ func main() {
 			continue
 		}
 
-		removeCommentMP3(item.Path)
+		removeMetadata(item.Path)
 	}
 
 	fmt.Println("\n" + colorGreen + "Completed successfully." + colorReset)
@@ -143,7 +131,7 @@ func drawProgressBar(current, total int) {
 // MP3 (ID3v2)
 // ============================================================================
 
-func removeCommentMP3(path string) {
+func removeMetadata(path string) {
 	tagFile, err := id3v2.Open(path, id3v2.Options{Parse: true})
 	if err != nil {
 		fmt.Printf(colorRed+"Error opening MP3: %s\n"+colorReset, path)
@@ -158,6 +146,22 @@ func removeCommentMP3(path string) {
 	tagFile.DeleteFrames("TXXX")
 	tagFile.DeleteFrames("USLT")
 	tagFile.DeleteFrames("SYLT")
+
+	// Remove attached pictures (cover art)
+	tagFile.DeleteFrames("APIC")
+	tagFile.DeleteFrames("PIC")
+
+	// Remove copyright frame
+	tagFile.DeleteFrames("TCOP")
+
+	// Remove common URL/where-from frames
+	tagFile.DeleteFrames("WXXX") // user defined URL
+	tagFile.DeleteFrames("WOAF") // official audio file webpage
+	tagFile.DeleteFrames("WOAR") // official artist webpage
+	tagFile.DeleteFrames("WOAS") // official audio source webpage
+	tagFile.DeleteFrames("WORS") // official internet radio station homepage
+	tagFile.DeleteFrames("WCOM") // commercial information
+	tagFile.DeleteFrames("WPUB") // publisher webpage
 
 	if err := tagFile.Save(); err != nil {
 		fmt.Printf(colorRed+"Error saving MP3: %s\n"+colorReset, path)
